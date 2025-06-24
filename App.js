@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Image, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { Button, Image, StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import mime from 'mime';
@@ -7,16 +7,18 @@ import { createClient } from '@supabase/supabase-js';
 import { Buffer } from 'buffer';
 global.Buffer = global.Buffer || Buffer;
 
-
-// 🔁 Replace with your Supabase credentials
 const SUPABASE_URL = 'https://foimaapdfdhvyrhvpxtw.supabase.co';
+
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvaW1hYXBkZmRodnlyaHZweHR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA2ODQyMTAsImV4cCI6MjA2NjI2MDIxMH0.KlooWo0U3CknmaHwV-45smnpXxZaK47O2ijZn4I5IEI';
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function App() {
   const [imageUri, setImageUri] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [publicUrl, setPublicUrl] = useState(null);
+  const [allImages, setAllImages] = useState([]);
+  const [loadingImages, setLoadingImages] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -24,6 +26,7 @@ export default function App() {
       if (status !== 'granted') {
         alert('Permission needed to access gallery.');
       }
+      await getAllImages(); // Load all images when app starts
     })();
   }, []);
 
@@ -79,15 +82,43 @@ export default function App() {
     }
   };
 
+  const getAllImages = async () => {
+    try {
+      setLoadingImages(true);
+      const { data, error } = await supabase.storage
+        .from('user-images')
+        .list('', { limit: 100 });
+
+      if (error) {
+        console.error('Fetch error:', error.message);
+        return;
+      }
+
+      const urls = data.map((file) =>
+        supabase.storage.from('user-images').getPublicUrl(file.name).data.publicUrl
+      );
+
+      setAllImages(urls);
+    } catch (err) {
+      console.error('Error loading images:', err.message);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Button title="Pick and Upload Image" onPress={pickImage} />
       {uploading && <ActivityIndicator size="large" color="blue" style={{ marginTop: 20 }} />}
-      {publicUrl && (
-        <>
-          <Text style={styles.text}>Uploaded Image:</Text>
-          <Image source={{ uri: publicUrl }} style={styles.image} />
-        </>
+      <Text style={styles.heading}>All Uploaded Images:</Text>
+      {loadingImages ? (
+        <ActivityIndicator size="large" color="green" style={{ marginTop: 20 }} />
+      ) : (
+        <ScrollView style={{ width: '100%' }}>
+          {allImages.map((url, index) => (
+            <Image key={index} source={{ uri: url }} style={styles.image} />
+          ))}
+        </ScrollView>
       )}
     </View>
   );
@@ -95,12 +126,12 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20, backgroundColor: '#fff',
+    flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 50, backgroundColor: '#fff',
+  },
+  heading: {
+    fontSize: 18, fontWeight: 'bold', marginVertical: 20,
   },
   image: {
-    width: 250, height: 250, marginTop: 20, borderRadius: 10,
-  },
-  text: {
-    marginTop: 15, fontSize: 16,
+    width: 300, height: 200, resizeMode: 'cover', marginVertical: 10, alignSelf: 'center', borderRadius: 10,
   },
 });
